@@ -8,8 +8,9 @@ do with the power consumption of the I²C hardware on the sensor drawing power
 unpredictably, causing voltage fluctuation that affects the accuracy of the sensor.
 
 There is one major limitation of this library and one caveat about its use. The
-limitation is that it is completely synchronous. Before I finish my current project,
-I'll be fixing this. You'll have the option of setting it up to be synchronous or to
+limitation is that it is completely synchronous. There are good reasons for this, but
+it is an inconvenience. Before I finish my current project,
+I may be fixing this. You'll have the option of setting it up to be synchronous or to
 have to call a function to see if data are available. The caveat comes from the sensor
 datasheet. **If you choose to alter this library to be asynchronous**, yourself, remember
 that having any other traffic on the MS5611's SPI channel during conversion (the 
