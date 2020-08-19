@@ -40,5 +40,30 @@ pins, plus 1 "chip select" pin for each sensor.)
 
 I should have an example in the repo, but you'll have to make do with my latest test:
 ```
+#include "arduino_ms5611_spi.h"
 
+MS5611_SPI *sensors[2];
+
+void setup() {
+  Serial.begin(19200);
+  sensors[0] = new MS5611_SPI( 7,  6,  8, 5, 100);
+  sensors[1] = new MS5611_SPI(11, 10, 12, 9, 100);
+  sensors[0]->reset();
+  sensors[1]->reset();
+
+  Serial.println("setup() returning");
+}
+
+void loop() {
+  for(int sensor=0; sensor<2; sensor++) {
+    if(sensors[sensor]->tick()) {
+      Serial.print(micros());
+      Serial.print(" T: ");
+      Serial.println(sensors[sensor]->get_temperature_float());
+      Serial.print(" P: ");
+      Serial.println(sensors[sensor]->get_pressure_float());
+    }
+  }
+  delay(100);
+}
 ```
