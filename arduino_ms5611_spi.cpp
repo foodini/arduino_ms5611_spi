@@ -89,24 +89,81 @@ void MS5611_SPI::reset() {
   CRC = spi_command(CRC_ADDR, 50, 16);
 }
 
-void MS5611_SPI::update() {
-  spi_command(0x58, 9000, 0);              // OSR = 4096 for best resolution
-  int32_t D2 = spi_command(0x00, 0, 24);   // Get "digital pressure value"
-  spi_command(0x48, 9000, 0);              // OSR = 4096 for best resolution
-  int32_t D1 = spi_command(0x00, 0, 24);    // Get "digital temperature value"
-  int32_t dT = D2 - (T_REF<<8);
+bool MS5611_SPI::tick() {
+  switch(tick_state) {
+  case 0:
+    spi_command(0x58, 0, 0);              // OSR = 4096 for best resolution
+    tick_conversion_request_time = micros();
+    tick_state = 1;
+    break;
+  case 1:
+    if (time_elapsed(tick_conversion_request_time)) {
+      D2 = spi_command(0x00, 0, 24);      // Get "digital pressure value"
+      tick_state = 2;
+      spi_command(0x48, 0, 0);              // OSR = 4096 for best resolution
+      tick_conversion_request_time = micros();
+      tick_state = 2;
+    }
+    break;
+  case 2:
+    if (time_elapsed(tick_conversion_request_time)) {
+      D1 = spi_command(0x00, 0, 24);      // Get "digital temperature value"    
+      int64_t dT = D2 - (T_REF<<8);
 
-  TEMP = 2000 + (((int64_t)dT * TEMPSENS)>>23);
+      TEMP = (int32_t)(2000 + ((dT * TEMPSENS)/(1<<23)));
+    
+      int64_t OFF = ((int64_t)OFF_T1<<16) + (((int64_t)TCO*dT)/(1<<7));
+      int64_t SENS = ((int64_t)SENS_T1<<15) + (((int64_t)TCS*dT)/(1<<8));
+      P = (((D1*SENS)>>21) - OFF)/(1<<15);
 
-  int64_t OFF = ((int64_t)OFF_T1<<16) + (((int64_t)TCO*dT)>>7);
-  int64_t SENS = ((int64_t)SENS_T1<<15) + (((int64_t)TCS*dT)>>8);
-  P = (((D1*SENS)>>21) - OFF)>>15;
+      // Do the "second order temperature compensation."
+      if (TEMP < 2000) {
+        int64_t T2 = (dT * dT)/(1<<31);
+        int64_t OFF2 = 5 - (TEMP - 2000) * (TEMP - 2000) / 2;
+        int64_t SENS2 = 5 - (TEMP - 2000) * (TEMP - 2000) / 4;
+        if (TEMP < -1500) {
+          OFF2 = OFF2 + 7 - (TEMP + 1500) * (TEMP + 1500);
+          SENS2 = SENS2 + 11 - (TEMP + 1500) * (TEMP + 1500) / 2;
+        }
+        TEMP -= T2;
+        OFF -= OFF2;
+        SENS -= SENS2;
+      }
+
+      tick_state = 0;
+    }
+    break;
+  }
+
+  return tick_state == 0;
 }
 
-int32_t MS5611_SPI::get_temperature() {
+int32_t MS5611_SPI::get_temperature_int() {
   return TEMP;
 }
 
-int32_t MS5611_SPI::get_pressure() {
+int32_t MS5611_SPI::get_pressure_int() {
   return P;
+}
+
+float MS5611_SPI::get_temperature_float() {
+  return TEMP/100.0;
+}
+
+float MS5611_SPI::get_pressure_float() {
+  return P/100.0;
+}
+
+bool MS5611_SPI::time_elapsed(uint32_t last_timestamp) {
+  int32_t now = micros();
+
+  // If last_timestamp + 9000 > 2^32-1, you can't just compare last_timestamp + 9000
+  // to now. But, now-last_timestamp should be the time since last_timestamp, even if 
+  // now < last_timestamp - as long as we're SURE it's cast to an unsigned. (I've seen
+  // the arduino return negative when subtracting uint8_t (!!!), so the cast is just
+  // my current flavor of paranoia.
+  if ((int32_t)(now - last_timestamp) > 9000)
+    return true;
+    
+  return false;
 }

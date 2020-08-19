@@ -13,9 +13,28 @@ public:
   // sck_pin:  ms5611 pin 8
   // csb_pin:  ms5611 pin 4 or 5 (they're supposedly internally connected. I use 5.)
   MS5611_SPI(int mosi_pin, int miso_pin, int sck_pin, int csb_pin, int sck_delay);
-  void update();
-  int32_t get_temperature();
-  int32_t get_pressure();
+  
+  // Returns true if new values were computed. It will take AT LEAST 4 calls to tick() to get new
+  // values. The first call will trigger a request to the sensor, asking for a pressure value. The
+  // subsequent calls will do nothing until 9ms have passed. After the delay, the pressure result
+  // is fetched from the chip and the temperature is requested. After another 9ms have passed, the
+  // next tick() will fetch the temperature result and compute calibrated temp and pressure values
+  // to store in the class instance. When this happens, you'll get a true result from the call.
+  // Otherwise, it will return false.
+  bool tick();
+
+  //get temp in hundredths of a degree centigrade. (centi-centigrades?) e.g., 2557 is 25.57C
+  int32_t get_temperature_int();
+
+  //get pressure in hundredths of a millibar (centi-milibars?) e.g., 100009 is 1000.09 mbar
+  int32_t get_pressure_int();
+
+  //get temp in centigrade.
+  float get_temperature_float();
+
+  //get pressure in millibar.
+  float get_pressure_float();
+  
   void reset();
 
 private:
@@ -39,6 +58,8 @@ private:
   uint16_t CRC;                        // Checksum
   int32_t  TEMP;                       // Computed temperature
   int32_t  P;                          // Computed pressure
+  int32_t  D2;                         // Raw pressure data from sensor
+  int32_t  D1;                         // Raw temperature data from sensor
 
   // I'm adding "_pin" to each of these because MOSI, MISO, SCK are already defined on arduino.
   int MOSI_pin;
@@ -47,9 +68,13 @@ private:
   int CSB_pin;
   int SCK_delay;
 
+  int tick_state = 0;
+  uint32_t tick_conversion_request_time = 0;
+
   void bit_out(int bit);
   int bit_in();
   uint32_t spi_command(byte command, unsigned int wait_time, int result_len);
+  bool time_elapsed(uint32_t last_timestamp);
 };
 
 #endif
