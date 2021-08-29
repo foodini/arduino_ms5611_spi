@@ -2,14 +2,18 @@
 
 I've seen one or two I²C libraries for the MS5611 Temperature and Pressure sensor, but
 while I²C is easier to implement and less taxing on the arduino (I think), it produces
-less reliable results from the sensor. SPI will give a better, more accurate and
-consistent result. If I recall the info on the datasheet properly, it has something to
+less reliable results from the sensor, according to the datasheet. It has something to
 do with the power consumption of the I²C hardware on the sensor drawing power 
-unpredictably, causing voltage fluctuation that affects the accuracy of the sensor.
+unpredictably, causing voltage fluctuation that affects the accuracy of the sensor. 
+SPI gives a better, more accurate and consistent result. For my projects, I need more
+than one ms5611, but having them on the same SPI bus again means that the bus activity
+causes the sensor to behave erratically. So, I needed an SPI driver that could operate
+on any set of pins. Here it is.
 
 The library is written to be as asynchronous as possible. The MS5611 requires a 8500us
 delay between requesting a "conversion" of data (the process of reading the analog
-state and storing it in the sensor's memory), and the retrieval of that result. Each
+state and storing it in the sensor's memory), and the retrieval of that result. I wait
+9000us to ensure that a fast arduino clock doesn't cause the lib to jump the gun. Each
 update to temp/pressure requires two of these reads. The library has an internal
 series of states it passes through with calls to tick():
 
@@ -33,37 +37,7 @@ that update would be getting the pressure data from the previous hour.)
 **A word of warning:** While it is possible to run multiple devices on the same SPI channel,
 you will get inaccurate results if you are driving the SPI bus while a conversion is under
 way. The modulation of those pins causes voltage fluctuations that, while minor, are enough
-to gravely impact sensitivity. If you need data in a constant, fast stream, either separate
+to gravely impact accuracy. If you need data in a constant, fast stream, either separate
 your sensors onto two different SPI busses (4 pins for each), or call tick() on one of them
 until it returns true, then tick() the other. (In this case, you'll just need the three SPI
 pins, plus 1 "chip select" pin for each sensor.)
-
-I should have an example in the repo, but you'll have to make do with my latest test:
-```
-#include "arduino_ms5611_spi.h"
-
-MS5611_SPI *sensors[2];
-
-void setup() {
-  Serial.begin(19200);
-  sensors[0] = new MS5611_SPI( 7,  6,  8, 5, 100);
-  sensors[1] = new MS5611_SPI(11, 10, 12, 9, 100);
-  sensors[0]->reset();
-  sensors[1]->reset();
-
-  Serial.println("setup() returning");
-}
-
-void loop() {
-  for(int sensor=0; sensor<2; sensor++) {
-    if(sensors[sensor]->tick()) {
-      Serial.print(micros());
-      Serial.print(" T: ");
-      Serial.println(sensors[sensor]->get_temperature_float());
-      Serial.print(" P: ");
-      Serial.println(sensors[sensor]->get_pressure_float());
-    }
-  }
-  delay(100);
-}
-```
