@@ -1,8 +1,37 @@
+#include "arduino.h"
 #include "arduino_ms5611_spi.h"
-#include <SPI.h>
 
 // TODO:
 // * Do the CRC check.
+
+KalmanFilter::KalmanFilter(float measurement_error, float estimate_error) :
+  m_measurement_error(measurement_error),
+  m_estimate_error(estimate_error),
+  m_initial_estimate_error(estimate_error),
+  m_estimate(0.0f),
+  m_initted(false),
+  update_count(0)
+{
+  
+}
+
+float KalmanFilter::tick(float measurement) {
+  update_count++;
+  if (!m_initted) {
+    m_estimate = measurement;
+    m_initted = true;
+  }
+  float previous_estimate = m_estimate;
+  float k = m_estimate_error / (m_estimate_error + m_measurement_error);
+  m_estimate = previous_estimate + k * (measurement - previous_estimate);
+  m_estimate_error = (1.0f - k) * m_estimate_error;
+  return m_estimate;
+}
+
+void KalmanFilter::reset() {
+  m_estimate_error = m_initial_estimate_error;
+  update_count=0;
+}
 
 MS5611_SPI::MS5611_SPI(int csb_pin, int miso_pin, int mosi_pin, int sck_pin, int sck_delay) :
     CSB_pin(csb_pin),
@@ -10,6 +39,9 @@ MS5611_SPI::MS5611_SPI(int csb_pin, int miso_pin, int mosi_pin, int sck_pin, int
     MOSI_pin(mosi_pin),
     SCK_pin(sck_pin),
     SCK_delay(sck_delay)
+#if MS5611_KALMAN
+    ,kalman_initted(false)
+#endif
 {
   pinMode(SCK_pin, OUTPUT);
   digitalWrite(SCK_pin, LOW);
@@ -86,14 +118,13 @@ void MS5611_SPI::reset() {
   TCO = spi_command(TCO_ADDR, 50, 16);
   T_REF = spi_command(T_REF_ADDR, 50, 16);
   TEMPSENS = spi_command(TEMPSENS_ADDR, 50, 16);
-  Serial.print("TEMPSENS:");
-  Serial.println(TEMPSENS);
   CRC = spi_command(CRC_ADDR, 50, 16);
 }
 
 bool MS5611_SPI::tick() {
   switch(tick_state) {
   case 0:
+    // Request conversion of pressure.
     spi_command(0x58, 0, 0);              // OSR = 4096 for best resolution
     tick_conversion_request_time = micros();
     tick_state = 1;
@@ -102,6 +133,7 @@ bool MS5611_SPI::tick() {
     if (time_elapsed(tick_conversion_request_time)) {
       D2 = spi_command(0x00, 0, 24);      // Get "digital pressure value"
       tick_state = 2;
+      // Request conversion of temperature.
       spi_command(0x48, 0, 0);              // OSR = 4096 for best resolution
       tick_conversion_request_time = micros();
       tick_state = 2;
@@ -140,31 +172,49 @@ bool MS5611_SPI::tick() {
   return tick_state == 0;
 }
 
-int32_t MS5611_SPI::get_temperature_int() {
-  return TEMP;
+#if MS5611_KALMAN
+void MS5611_SPI::reset_kalman_filter() {
+  // Doing this will leave the temp/pressure estimates where they are, effectively using them as a new
+  // initial state for a new kalman sequence.
+  kalman_pressure_err_estimate = 3;  // From the datasheet, error is plus-or-minus 1.5mbar.
+  kalman_temp_err_estimate = 1.6;
+}
+#endif
+
+float MS5611_SPI::get_temperature() {
+#if MS5611_KALMAN
+    return kalman_temp_estimate;
+#else
+    return TEMP/100.0;
+#endif
 }
 
-int32_t MS5611_SPI::get_pressure_int() {
-  return P;
-}
-
-float MS5611_SPI::get_temperature_float() {
-  return TEMP/100.0;
-}
-
-float MS5611_SPI::get_pressure_float() {
+float MS5611_SPI::get_pressure() {
+#if MS5611_KALMAN
+  return kalman_pressure_estimate;
+#else
   return P/100.0;
+#endif
+}
+
+// I make this statically available so users who use the kalman filter can get at it.
+float MS5611_SPI::bar_and_temp_to_alt(float millibar, float temp) {
+  return (pow(1013.25/millibar, 1.0 / 5.257) - 1.0) * (temp + 273.15) / 0.0065;
+}
+
+float MS5611_SPI::get_altitude() {
+  return MS5611_SPI::bar_and_temp_to_alt(get_pressure(), get_temperature());
 }
 
 bool MS5611_SPI::time_elapsed(uint32_t last_timestamp) {
   int32_t now = micros();
 
-  // If last_timestamp + 9000 > 2^32-1, you can't just compare last_timestamp + 9000
+  // If last_timestamp + 8400 > 2^32-1, you can't just compare last_timestamp + 8400
   // to now. But, now-last_timestamp should be the time since last_timestamp, even if 
   // now < last_timestamp - as long as we're SURE it's cast to an unsigned. (I've seen
   // the arduino return negative when subtracting uint8_t (!!!), so the cast is just
   // my current flavor of paranoia.
-  if ((int32_t)(now - last_timestamp) > 9000)
+  if ((int32_t)(now - last_timestamp) > 8400)
     return true;
     
   return false;

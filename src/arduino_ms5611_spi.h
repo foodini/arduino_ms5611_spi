@@ -1,11 +1,31 @@
 #ifndef ARDUINO_MS5611_SPI
 #define ARDUINO_MS5611_SPI
 
-#include <Arduino.h>
 #include <SPI.h>
 
 // TODO:
 // * Do the CRC check.
+
+class KalmanFilter {
+public:
+  // measurement_error - will hold constant at the error level of your sensor. (If err is +-X, use 2X)
+  // estimate_error - probably good to start at half of measurement_error.
+  KalmanFilter(float measurement_error, float estimate_error);
+
+  float tick(float measurement);
+  
+  void reset();
+
+  float get_estimate() { return m_estimate; }
+
+  int update_count;
+private:
+  bool m_initted;
+  float m_estimate;
+  float m_measurement_error;
+  float m_estimate_error;
+  float m_initial_estimate_error;
+};
 
 class MS5611_SPI {
 public:
@@ -18,7 +38,7 @@ public:
   // mosi_pin: ms5611 pin 7
   // sck_pin:  ms5611 pin 8
   MS5611_SPI(int csb_pin, int miso_pin, int mosi_pin, int sck_pin, int sck_delay);
-  
+
   // Returns true if new values were computed. It will take AT LEAST 4 calls to tick() to get new
   // values. The first call will trigger a request to the sensor, asking for a pressure value. The
   // subsequent calls will do nothing until 9ms have passed. After the delay, the pressure result
@@ -28,31 +48,30 @@ public:
   // Otherwise, it will return false.
   bool tick();
 
-  //get temp in hundredths of a degree centigrade. (centi-centigrades?) e.g., 2557 is 25.57C
-  int32_t get_temperature_int();
-
-  //get pressure in hundredths of a millibar (centi-milibars?) e.g., 100009 is 1000.09 mbar
-  int32_t get_pressure_int();
-
   //get temp in centigrade.
-  float get_temperature_float();
+  float get_temperature();
 
   //get pressure in millibar.
-  float get_pressure_float();
-  
-  void reset();
+  float get_pressure();
 
-private:
-  static const byte FACTORY_DATA_ADDR = 0xa0; // No info in datasheet other than "factory data".
-  static const byte SENS_T1_ADDR = 0xa2;      // "Pressure sensitivity"
-  static const byte OFF_T1_ADDR = 0xa4;       // "Pressure offset"
-  static const byte TCS_ADDR = 0xa6;          // "Temperature coefficient of pressure sensitivity"
-  static const byte TCO_ADDR = 0xa8;          // "Temperature coefficient of pressure offset"
-  static const byte T_REF_ADDR = 0xaa;        // "Reference temperature"
-  static const byte TEMPSENS_ADDR = 0xac;     // "Temperature coefficient of the temperature"
-  static const byte CRC_ADDR = 0xae;          // Checksum
+  //get altitude in meters.
+  float get_altitude();
   
-  // Pardon the all-caps naming. I'm keeping as close to the datasheet as possible.
+  static float bar_and_temp_to_alt(float bar, float temp);
+
+  void reset();
+  
+private:
+  static const uint8_t FACTORY_DATA_ADDR = 0xa0; // No info in datasheet other than "factory data".
+  static const uint8_t SENS_T1_ADDR = 0xa2;      // "Pressure sensitivity"
+  static const uint8_t OFF_T1_ADDR = 0xa4;       // "Pressure offset"
+  static const uint8_t TCS_ADDR = 0xa6;          // "Temperature coefficient of pressure sensitivity"
+  static const uint8_t TCO_ADDR = 0xa8;          // "Temperature coefficient of pressure offset"
+  static const uint8_t T_REF_ADDR = 0xaa;        // "Reference temperature"
+  static const uint8_t TEMPSENS_ADDR = 0xac;     // "Temperature coefficient of the temperature"
+  static const uint8_t CRC_ADDR = 0xae;          // Checksum
+  
+  // Pardon the all-caps, nonstandard naming. I'm keeping as close to the datasheet as possible.
   uint16_t FACTORY_DATA;               // No info in datasheet other than "factory data".
   uint16_t SENS_T1;                    // "Pressure sensitivity"
   uint16_t OFF_T1;                     // "Pressure offset"
@@ -78,7 +97,7 @@ private:
 
   void bit_out(int bit);
   int bit_in();
-  uint32_t spi_command(byte command, unsigned int wait_time, int result_len);
+  uint32_t spi_command(uint8_t command, unsigned int wait_time, int result_len);
   bool time_elapsed(uint32_t last_timestamp);
 };
 
