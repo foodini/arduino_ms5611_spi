@@ -1,6 +1,7 @@
 #ifndef ARDUINO_MS5611_SPI
 #define ARDUINO_MS5611_SPI
 
+#include <Arduino.h>
 #include <SPI.h>
 
 // TODO:
@@ -8,11 +9,15 @@
 
 class MS5611_SPI {
 public:
-  // mosi_pin: ms5611 pin 7
+  // The argument order was chosen to allow me to look at a breadboard and, without knowing which
+  // line was mosi or sck, just enter the processor's IO pins in the order that they're connected
+  // to the ms5611. 
+  // csb_pin:  ms5611 pin 4 or 5 (they're supposedly internally connected. I use 5.) 
+  //     CSB LOW = Chip Selected.
   // miso_pin: ms5611 pin 6
+  // mosi_pin: ms5611 pin 7
   // sck_pin:  ms5611 pin 8
-  // csb_pin:  ms5611 pin 4 or 5 (they're supposedly internally connected. I use 5.)
-  MS5611_SPI(int mosi_pin, int miso_pin, int sck_pin, int csb_pin, int sck_delay);
+  MS5611_SPI(int csb_pin, int miso_pin, int mosi_pin, int sck_pin, int sck_delay);
   
   // Returns true if new values were computed. It will take AT LEAST 4 calls to tick() to get new
   // values. The first call will trigger a request to the sensor, asking for a pressure value. The

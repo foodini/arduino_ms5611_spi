@@ -1,0 +1,9 @@
+name=SPI Library for MS5611 Altimeter/Temperature Sensor
+version=2.0.0
+author=Ron Barry
+maintainer=Ron Barry
+sentence=Implements the ms5611 interface using any pair of arduino pins
+paragraph=The ms5611 works best when interfaced via spi and, since using the spi bus while the sensor is converting a measurement affects the sensor, it's best to have it on its own spi bus. As a consequence, I didn't want to use the hardware spi on the arduino and created this, allowing you to use any pins you like for control.
+category=Sensors
+url=https://github.com/foodini/arduino_ms5611_spi
+architectures=*

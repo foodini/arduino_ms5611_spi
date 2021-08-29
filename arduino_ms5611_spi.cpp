@@ -4,11 +4,11 @@
 // TODO:
 // * Do the CRC check.
 
-MS5611_SPI::MS5611_SPI(int mosi_pin, int miso_pin, int sck_pin, int csb_pin, int sck_delay) :
-    MOSI_pin(mosi_pin),
-    MISO_pin(miso_pin),
-    SCK_pin(sck_pin),
+MS5611_SPI::MS5611_SPI(int csb_pin, int miso_pin, int mosi_pin, int sck_pin, int sck_delay) :
     CSB_pin(csb_pin),
+    MISO_pin(miso_pin),
+    MOSI_pin(mosi_pin),
+    SCK_pin(sck_pin),
     SCK_delay(sck_delay)
 {
   pinMode(SCK_pin, OUTPUT);
@@ -86,6 +86,8 @@ void MS5611_SPI::reset() {
   TCO = spi_command(TCO_ADDR, 50, 16);
   T_REF = spi_command(T_REF_ADDR, 50, 16);
   TEMPSENS = spi_command(TEMPSENS_ADDR, 50, 16);
+  Serial.print("TEMPSENS:");
+  Serial.println(TEMPSENS);
   CRC = spi_command(CRC_ADDR, 50, 16);
 }
 
