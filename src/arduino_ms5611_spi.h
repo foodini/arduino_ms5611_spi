@@ -62,6 +62,8 @@ public:
   void reset();
   
 private:
+  bool m_initted;
+  
   static const uint8_t FACTORY_DATA_ADDR = 0xa0; // No info in datasheet other than "factory data".
   static const uint8_t SENS_T1_ADDR = 0xa2;      // "Pressure sensitivity"
   static const uint8_t OFF_T1_ADDR = 0xa4;       // "Pressure offset"

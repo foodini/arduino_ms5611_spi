@@ -34,6 +34,7 @@ void KalmanFilter::reset() {
 }
 
 MS5611_SPI::MS5611_SPI(int csb_pin, int miso_pin, int mosi_pin, int sck_pin, int sck_delay) :
+    m_initted(false),
     CSB_pin(csb_pin),
     MISO_pin(miso_pin),
     MOSI_pin(mosi_pin),
@@ -106,6 +107,10 @@ uint32_t MS5611_SPI::spi_command(byte command, unsigned int wait_time, int resul
   return result;
 }
 
+// "reset" is the name of the action on the ms5611 datasheet. It MUST BE CALLED before
+// any temp or pressure conversions, however, it takes 3500 microseconds to run and 
+// MUST therefore NOT be called by the constructor. If the user tries to tick without
+// calling reset(), the call will be made for them.
 void MS5611_SPI::reset() {
   spi_command(0x1e, 3500, 0);
   // The required delay time is 2.8ms, but I've had issues w/ badly clocked arduinos, so
@@ -119,11 +124,17 @@ void MS5611_SPI::reset() {
   T_REF = spi_command(T_REF_ADDR, 50, 16);
   TEMPSENS = spi_command(TEMPSENS_ADDR, 50, 16);
   CRC = spi_command(CRC_ADDR, 50, 16);
+
+  m_initted = true;
 }
 
 bool MS5611_SPI::tick() {
   switch(tick_state) {
   case 0:
+    if(!m_initted) {
+      Serial.println("reset() has not been called. Doing so automatically.");
+      reset();      
+    }
     // Request conversion of pressure.
     spi_command(0x58, 0, 0);              // OSR = 4096 for best resolution
     tick_conversion_request_time = micros();
